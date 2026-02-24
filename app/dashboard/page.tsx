@@ -51,7 +51,7 @@ export default function DashboardPage() {
   const [eleve, setEleve] = useState<Eleve | null>(null);
   const [matieres, setMatieres] = useState<Matiere[]>([]);
   const [loading, setLoading] = useState(true);
-  const [partiesRestantes, setPartiesRestantes] = useState(2);
+  const [playedMatieres, setPlayedMatieres] = useState<Set<string>>(new Set());
   const [defi, setDefi] = useState<Defi | null>(null);
   const [defiAnswer, setDefiAnswer] = useState<string | null>(null);
   const [defiRevealed, setDefiRevealed] = useState(false);
@@ -93,19 +93,16 @@ export default function DashboardPage() {
         await supabase
           .from("zoo_eleves")
           .update({
-            parties_aujourd_hui: 0,
             derniere_partie: today,
             streak_count: newStreak,
             streak_last_date: today,
           })
           .eq("id", eleveId);
-        eleveData.parties_aujourd_hui = 0;
         eleveData.streak_count = newStreak;
         eleveData.streak_last_date = today;
       }
 
       setEleve(eleveData);
-      setPartiesRestantes(2 - (eleveData.parties_aujourd_hui || 0));
 
       const { data: matieresData } = await supabase
         .from("zoo_matieres")
@@ -113,6 +110,17 @@ export default function DashboardPage() {
         .order("name");
 
       setMatieres(matieresData || []);
+
+      // Vérifier quelles matières ont déjà été jouées aujourd'hui
+      const { data: todayParties } = await supabase
+        .from("zoo_parties")
+        .select("matiere_id")
+        .eq("eleve_id", eleveId)
+        .eq("played_at", today);
+
+      if (todayParties) {
+        setPlayedMatieres(new Set(todayParties.map((p) => p.matiere_id)));
+      }
 
       // Charger le défi du jour
       if (classeId) {
@@ -265,12 +273,12 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Parties restantes */}
+        {/* Résumé matières */}
         <div className="mt-4 rounded-[15px] bg-zoo-yellow/20 p-3">
           <span className="text-lg font-semibold">
-            {partiesRestantes > 0
-              ? `🎮 ${partiesRestantes} partie${partiesRestantes > 1 ? "s" : ""} restante${partiesRestantes > 1 ? "s" : ""} aujourd'hui`
-              : "⏰ Reviens demain pour jouer !"}
+            {playedMatieres.size < matieres.length
+              ? `🎮 ${matieres.length - playedMatieres.size} matière${matieres.length - playedMatieres.size > 1 ? "s" : ""} disponible${matieres.length - playedMatieres.size > 1 ? "s" : ""}`
+              : "⏰ Tu as joué toutes les matières aujourd'hui ! Reviens demain."}
           </span>
         </div>
       </div>
@@ -332,19 +340,27 @@ export default function DashboardPage() {
         </h2>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {matieres.map((matiere, index) => (
-            <Link
-              key={matiere.id}
-              href={partiesRestantes > 0 ? `/quiz?matiere=${matiere.slug}` : "#"}
-              className={`card card-hover flex items-center gap-4 p-5 ${
-                partiesRestantes <= 0 ? "pointer-events-none opacity-50" : ""
-              }`}
-              style={{ animation: `slideIn 0.3s ease-out ${index * 0.05}s both` }}
-            >
-              <span className="text-4xl">{matiere.emoji}</span>
-              <span className="text-lg font-semibold text-gray-700">{matiere.name}</span>
-            </Link>
-          ))}
+          {matieres.map((matiere, index) => {
+            const alreadyPlayed = playedMatieres.has(matiere.id);
+            return (
+              <Link
+                key={matiere.id}
+                href={alreadyPlayed ? "#" : `/quiz?matiere=${matiere.slug}`}
+                className={`card card-hover flex items-center gap-4 p-5 ${
+                  alreadyPlayed ? "pointer-events-none opacity-50" : ""
+                }`}
+                style={{ animation: `slideIn 0.3s ease-out ${index * 0.05}s both` }}
+              >
+                <span className="text-4xl">{matiere.emoji}</span>
+                <div>
+                  <span className="text-lg font-semibold text-gray-700">{matiere.name}</span>
+                  {alreadyPlayed && (
+                    <div className="text-xs text-green-600 font-medium">✓ Fait aujourd&apos;hui</div>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 

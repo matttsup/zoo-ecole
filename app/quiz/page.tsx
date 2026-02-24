@@ -89,13 +89,6 @@ function QuizPage() {
         return;
       }
 
-      // Vérifier limite de 2 parties
-      const today = new Date().toISOString().split("T")[0];
-      if (eleveData.derniere_partie === today && eleveData.parties_aujourd_hui >= 2) {
-        router.push("/dashboard");
-        return;
-      }
-
       setEleve(eleveData);
 
       const { data: matiere } = await supabase
@@ -105,6 +98,21 @@ function QuizPage() {
         .single();
 
       if (!matiere) {
+        router.push("/dashboard");
+        return;
+      }
+
+      // Vérifier si cette matière a déjà été jouée aujourd'hui
+      const today = new Date().toISOString().split("T")[0];
+      const { data: alreadyPlayed } = await supabase
+        .from("zoo_parties")
+        .select("id")
+        .eq("eleve_id", eleveId)
+        .eq("matiere_id", matiere.id)
+        .eq("played_at", today)
+        .limit(1);
+
+      if (alreadyPlayed && alreadyPlayed.length > 0) {
         router.push("/dashboard");
         return;
       }
@@ -123,7 +131,6 @@ function QuizPage() {
         return;
       }
 
-      // Mélanger et prendre 10
       const shuffled = questionsData.sort(() => Math.random() - 0.5).slice(0, 10);
       setQuestions(shuffled);
 
@@ -140,15 +147,6 @@ function QuizPage() {
         .single();
 
       if (partie) setPartieId(partie.id);
-
-      // Incrémenter les parties
-      await supabase
-        .from("zoo_eleves")
-        .update({
-          parties_aujourd_hui: (eleveData.parties_aujourd_hui || 0) + 1,
-          derniere_partie: today,
-        })
-        .eq("id", eleveId);
 
       setLoading(false);
     }

@@ -64,6 +64,10 @@ function AdminPage() {
   const [newCorrect, setNewCorrect] = useState("a");
   const [saving, setSaving] = useState(false);
 
+  // Formulaire nouvel élève
+  const [newEleveName, setNewEleveName] = useState("");
+  const [addingEleve, setAddingEleve] = useState(false);
+
   useEffect(() => {
     const saved = sessionStorage.getItem("zoo_admin_auth");
     if (saved === "true") setIsAuthenticated(true);
@@ -178,6 +182,45 @@ function AdminPage() {
     const supabase = createClient();
     await supabase.from("zoo_questions").delete().eq("id", id);
     setQuestions(questions.filter((q) => q.id !== id));
+  }
+
+  async function handleAddEleve(e: React.FormEvent) {
+    e.preventDefault();
+    if (!classeId || !newEleveName.trim()) return;
+    setAddingEleve(true);
+
+    const supabase = createClient();
+    const { data: existing } = await supabase
+      .from("zoo_eleves")
+      .select("id")
+      .eq("classe_id", classeId)
+      .eq("name", newEleveName.trim())
+      .single();
+
+    if (existing) {
+      alert("Cet élève existe déjà dans la classe !");
+      setAddingEleve(false);
+      return;
+    }
+
+    const { data: newEleve, error } = await supabase
+      .from("zoo_eleves")
+      .insert({ classe_id: classeId, name: newEleveName.trim() })
+      .select("id, name, niveau, total_carottes, parties_aujourd_hui")
+      .single();
+
+    if (!error && newEleve) {
+      setEleves([...eleves, newEleve]);
+      setNewEleveName("");
+    }
+    setAddingEleve(false);
+  }
+
+  async function handleDeleteEleve(id: string, name: string) {
+    if (!confirm(`Supprimer l'élève "${name}" et toutes ses données ? Cette action est irréversible.`)) return;
+    const supabase = createClient();
+    await supabase.from("zoo_eleves").delete().eq("id", id);
+    setEleves(eleves.filter((e) => e.id !== id));
   }
 
   // Page de saisie du code admin
@@ -388,31 +431,64 @@ function AdminPage() {
       )}
 
       {tab === "eleves" && (
-        <div className="card">
-          <h2 className="mb-4 text-lg font-bold text-zoo-purple">Statistiques des élèves</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b-2 border-gray-100">
-                  <th className="p-3 text-sm font-semibold text-gray-600">Élève</th>
-                  <th className="p-3 text-sm font-semibold text-gray-600">Niveau</th>
-                  <th className="p-3 text-sm font-semibold text-gray-600">Score total</th>
-                  <th className="p-3 text-sm font-semibold text-gray-600">Parties aujourd&apos;hui</th>
-                </tr>
-              </thead>
-              <tbody>
-                {eleves.map((e) => (
-                  <tr key={e.id} className="border-b border-gray-50">
-                    <td className="p-3 font-medium text-gray-800">{e.name}</td>
-                    <td className="p-3">{e.niveau}</td>
-                    <td className="p-3">{e.total_carottes}</td>
-                    <td className="p-3">{e.parties_aujourd_hui}/2</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {/* Ajouter un élève */}
+          <div className="card">
+            <h2 className="mb-3 text-lg font-bold text-zoo-purple">Ajouter un élève</h2>
+            <form onSubmit={handleAddEleve} className="flex gap-2">
+              <input
+                type="text"
+                value={newEleveName}
+                onChange={(e) => setNewEleveName(e.target.value)}
+                placeholder="Prénom de l'élève"
+                className="flex-1 rounded-[10px] border-2 border-gray-200 px-4 py-2 focus:border-zoo-purple focus:outline-none"
+                maxLength={30}
+                required
+              />
+              <button
+                type="submit"
+                disabled={addingEleve || !newEleveName.trim()}
+                className="btn-primary bg-zoo-blue text-sm disabled:opacity-50"
+              >
+                {addingEleve ? "..." : "➕ Ajouter"}
+              </button>
+            </form>
           </div>
-        </div>
+
+          {/* Liste des élèves */}
+          <div className="card">
+            <h2 className="mb-4 text-lg font-bold text-zoo-purple">Élèves ({eleves.length})</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b-2 border-gray-100">
+                    <th className="p-3 text-sm font-semibold text-gray-600">Élève</th>
+                    <th className="p-3 text-sm font-semibold text-gray-600">Niveau</th>
+                    <th className="p-3 text-sm font-semibold text-gray-600">Score total</th>
+                    <th className="p-3 text-sm font-semibold text-gray-600">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {eleves.map((e) => (
+                    <tr key={e.id} className="border-b border-gray-50">
+                      <td className="p-3 font-medium text-gray-800">{e.name}</td>
+                      <td className="p-3">{e.niveau}</td>
+                      <td className="p-3">{e.total_carottes}</td>
+                      <td className="p-3">
+                        <button
+                          onClick={() => handleDeleteEleve(e.id, e.name)}
+                          className="rounded-[8px] bg-red-100 px-3 py-1 text-sm text-red-600 hover:bg-red-200"
+                        >
+                          🗑 Supprimer
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
