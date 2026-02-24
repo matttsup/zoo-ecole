@@ -42,7 +42,7 @@ export default function ScoreboardPage() {
         .order("niveau", { ascending: false })
         .order("total_carottes", { ascending: false });
 
-      const elevesData = data || [];
+      const elevesData: EleveScore[] = (data || []).map((e) => ({ ...e, weeklyScore: 0 }));
 
       // Charger les scores de la semaine
       const now = new Date();
