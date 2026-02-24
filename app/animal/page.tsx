@@ -29,7 +29,7 @@ export default function AnimalPage() {
 
     const supabase = createClient();
     await supabase
-      .from("eleves")
+      .from("zoo_eleves")
       .update({
         animal_type: selectedType,
         animal_color: selectedColor,

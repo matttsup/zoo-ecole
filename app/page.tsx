@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function HomePage() {
   const router = useRouter();
-  const [codeClasse, setCodeClasse] = useState("");
-  const [prenom, setPrenom] = useState("");
+  const [codeClasse, setCodeClasse] = useState("301");
+  const [prenom, setPrenom] = useState("Anaïs");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,20 +22,21 @@ export default function HomePage() {
 
     // Chercher ou créer la classe
     let { data: classe } = await supabase
-      .from("classes")
+      .from("zoo_classes")
       .select("id")
       .eq("code_classe", codeClasse.trim().toUpperCase())
       .single();
 
     if (!classe) {
       const { data: newClasse, error: createErr } = await supabase
-        .from("classes")
+        .from("zoo_classes")
         .insert({ name: `Classe ${codeClasse.trim().toUpperCase()}`, code_classe: codeClasse.trim().toUpperCase() })
         .select("id")
         .single();
 
       if (createErr || !newClasse) {
-        setError("Impossible de créer la classe. Réessaie !");
+        console.error("Erreur création classe:", createErr);
+        setError(`Impossible de créer la classe: ${createErr?.message || "erreur inconnue"}`);
         setLoading(false);
         return;
       }
@@ -44,7 +45,7 @@ export default function HomePage() {
 
     // Chercher ou créer l'élève
     let { data: eleve } = await supabase
-      .from("eleves")
+      .from("zoo_eleves")
       .select("id, animal_type, animal_name")
       .eq("classe_id", classe.id)
       .eq("name", prenom.trim())
@@ -52,13 +53,14 @@ export default function HomePage() {
 
     if (!eleve) {
       const { data: newEleve, error: eleveErr } = await supabase
-        .from("eleves")
+        .from("zoo_eleves")
         .insert({ classe_id: classe.id, name: prenom.trim() })
         .select("id, animal_type, animal_name")
         .single();
 
       if (eleveErr || !newEleve) {
-        setError("Impossible de créer l'élève. Réessaie !");
+        console.error("Erreur création élève:", eleveErr);
+        setError(`Impossible de créer l'élève: ${eleveErr?.message || "erreur inconnue"}`);
         setLoading(false);
         return;
       }
@@ -79,13 +81,13 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-[80vh] flex-col items-center justify-center">
+    <div className="flex min-h-[80vh] min-h-[80dvh] flex-col items-center justify-center">
       <div className="card animate-bounceIn w-full max-w-md text-center">
-        <div className="mb-4 text-8xl animate-float">🦁</div>
-        <h1 className="mb-2 text-4xl font-bold text-zoo-purple">
+        <div className="mb-3 text-6xl animate-float sm:mb-4 sm:text-8xl">🦁</div>
+        <h1 className="mb-2 text-3xl font-bold text-zoo-purple sm:text-4xl">
           Zoo École
         </h1>
-        <p className="mb-8 text-lg text-gray-500">
+        <p className="mb-6 text-base text-gray-500 sm:mb-8 sm:text-lg">
           Apprends en t&apos;amusant avec ton animal !
         </p>
 

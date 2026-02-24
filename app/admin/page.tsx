@@ -38,8 +38,13 @@ type EleveStats = {
   parties_aujourd_hui: number;
 };
 
+const ADMIN_CODE = "admin";
+
 function AdminPage() {
   const searchParams = useSearchParams();
+  const [adminCode, setAdminCode] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [codeClasse, setCodeClasse] = useState(searchParams.get("classe") || "");
   const [classeId, setClasseId] = useState<string | null>(null);
   const [classeName, setClasseName] = useState("");
@@ -59,6 +64,22 @@ function AdminPage() {
   const [newCorrect, setNewCorrect] = useState("a");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const saved = sessionStorage.getItem("zoo_admin_auth");
+    if (saved === "true") setIsAuthenticated(true);
+  }, []);
+
+  function handleAdminLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (adminCode.trim().toLowerCase() === ADMIN_CODE) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem("zoo_admin_auth", "true");
+      setAuthError("");
+    } else {
+      setAuthError("Code incorrect !");
+    }
+  }
+
   async function handleConnect(e: React.FormEvent) {
     e.preventDefault();
     if (!codeClasse.trim()) return;
@@ -66,7 +87,7 @@ function AdminPage() {
 
     const supabase = createClient();
     const { data: classe } = await supabase
-      .from("classes")
+      .from("zoo_classes")
       .select("id, name")
       .eq("code_classe", codeClasse.trim().toUpperCase())
       .single();
@@ -80,14 +101,14 @@ function AdminPage() {
     setClasseId(classe.id);
     setClasseName(classe.name);
 
-    const { data: matieresData } = await supabase.from("matieres").select("*").order("name");
+    const { data: matieresData } = await supabase.from("zoo_matieres").select("*").order("name");
     setMatieres(matieresData || []);
     if (matieresData && matieresData.length > 0) {
       setSelectedMatiere(matieresData[0].id);
     }
 
     const { data: elevesData } = await supabase
-      .from("eleves")
+      .from("zoo_eleves")
       .select("id, name, niveau, total_carottes, parties_aujourd_hui")
       .eq("classe_id", classe.id)
       .order("niveau", { ascending: false });
@@ -102,7 +123,7 @@ function AdminPage() {
     async function loadQuestions() {
       const supabase = createClient();
       const { data } = await supabase
-        .from("questions")
+        .from("zoo_questions")
         .select("*")
         .eq("matiere_id", selectedMatiere!)
         .or(`is_custom.eq.false,classe_id.eq.${classeId}`)
@@ -120,7 +141,7 @@ function AdminPage() {
     setSaving(true);
 
     const supabase = createClient();
-    const { error } = await supabase.from("questions").insert({
+    const { error } = await supabase.from("zoo_questions").insert({
       matiere_id: selectedMatiere,
       question: newQuestion,
       reponse_a: newA,
@@ -142,7 +163,7 @@ function AdminPage() {
 
       // Recharger
       const { data } = await supabase
-        .from("questions")
+        .from("zoo_questions")
         .select("*")
         .eq("matiere_id", selectedMatiere)
         .or(`is_custom.eq.false,classe_id.eq.${classeId}`)
@@ -155,11 +176,49 @@ function AdminPage() {
   async function handleDeleteQuestion(id: string) {
     if (!confirm("Supprimer cette question ?")) return;
     const supabase = createClient();
-    await supabase.from("questions").delete().eq("id", id);
+    await supabase.from("zoo_questions").delete().eq("id", id);
     setQuestions(questions.filter((q) => q.id !== id));
   }
 
-  // Page de connexion admin
+  // Page de saisie du code admin
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="card w-full max-w-md text-center">
+          <div className="mb-4 text-6xl">🔒</div>
+          <h1 className="mb-2 text-3xl font-bold text-zoo-purple">Administration</h1>
+          <p className="mb-6 text-gray-500">Entrez le code d&apos;accès</p>
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <input
+              type="password"
+              value={adminCode}
+              onChange={(e) => setAdminCode(e.target.value)}
+              placeholder="Code d'accès"
+              className="w-full rounded-[15px] border-2 border-gray-200 px-5 py-3 text-center text-xl tracking-widest focus:border-zoo-purple focus:outline-none"
+              autoFocus
+              required
+            />
+            {authError && (
+              <p className="text-sm font-medium text-red-500">{authError}</p>
+            )}
+            <button
+              type="submit"
+              className="btn-primary w-full bg-gradient-to-r from-zoo-purple to-zoo-pink text-lg"
+            >
+              Accéder
+            </button>
+          </form>
+          <div className="mt-4">
+            <a href="/" className="text-sm text-gray-400 hover:text-zoo-purple">
+              ← Retour à l&apos;accueil
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Page de connexion classe
   if (!classeId) {
     return (
       <div className="flex min-h-[80vh] items-center justify-center">

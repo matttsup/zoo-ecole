@@ -6,6 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { ANIMALS, AnimalType, AnimalColor } from "@/lib/animals";
 import { AnimalDisplay } from "@/components/AnimalDisplay";
 import { ProgressBar } from "@/components/ProgressBar";
+import { Confetti } from "@/components/Confetti";
+import { BadgePopup } from "@/components/BadgePopup";
+import { getNewlyEarnedBadge, Badge } from "@/lib/badges";
+import { getLevel } from "@/lib/levels";
 
 type Question = {
   id: string;
@@ -15,6 +19,14 @@ type Question = {
   reponse_c: string;
   reponse_d: string;
   bonne_reponse: string;
+};
+
+type WrongAnswer = {
+  question: string;
+  givenAnswer: string;
+  correctAnswer: string;
+  givenText: string;
+  correctText: string;
 };
 
 type Eleve = {
@@ -51,6 +63,10 @@ function QuizPage() {
   const [matiereEmoji, setMatiereEmoji] = useState("");
   const [loading, setLoading] = useState(true);
   const [partieId, setPartieId] = useState<string | null>(null);
+  const [wrongAnswers, setWrongAnswers] = useState<WrongAnswer[]>([]);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [newBadge, setNewBadge] = useState<Badge | null>(null);
+  const [showReview, setShowReview] = useState(false);
 
   useEffect(() => {
     async function loadQuiz() {
@@ -63,7 +79,7 @@ function QuizPage() {
       const supabase = createClient();
 
       const { data: eleveData } = await supabase
-        .from("eleves")
+        .from("zoo_eleves")
         .select("*")
         .eq("id", eleveId)
         .single();
@@ -83,7 +99,7 @@ function QuizPage() {
       setEleve(eleveData);
 
       const { data: matiere } = await supabase
-        .from("matieres")
+        .from("zoo_matieres")
         .select("id, name, emoji")
         .eq("slug", matiereSlug)
         .single();
@@ -98,7 +114,7 @@ function QuizPage() {
 
       // Charger 10 questions aléatoires
       const { data: questionsData } = await supabase
-        .from("questions")
+        .from("zoo_questions")
         .select("*")
         .eq("matiere_id", matiere.id);
 
@@ -113,7 +129,7 @@ function QuizPage() {
 
       // Créer la partie
       const { data: partie } = await supabase
-        .from("parties")
+        .from("zoo_parties")
         .insert({
           eleve_id: eleveId,
           matiere_id: matiere.id,
@@ -127,7 +143,7 @@ function QuizPage() {
 
       // Incrémenter les parties
       await supabase
-        .from("eleves")
+        .from("zoo_eleves")
         .update({
           parties_aujourd_hui: (eleveData.parties_aujourd_hui || 0) + 1,
           derniere_partie: today,
@@ -146,43 +162,58 @@ function QuizPage() {
     setSelected(answer);
     setShowResult(true);
 
-    const isCorrect = answer === questions[currentIndex].bonne_reponse;
+    const q = questions[currentIndex];
+    const isCorrect = answer === q.bonne_reponse;
     const newScore = isCorrect ? score + 1 : score;
     if (isCorrect) setScore(newScore);
 
+    if (!isCorrect) {
+      const answerMap: Record<string, string> = { a: q.reponse_a, b: q.reponse_b, c: q.reponse_c, d: q.reponse_d };
+      setWrongAnswers((prev) => [...prev, {
+        question: q.question,
+        givenAnswer: answer,
+        correctAnswer: q.bonne_reponse,
+        givenText: answerMap[answer],
+        correctText: answerMap[q.bonne_reponse],
+      }]);
+    }
+
     const supabase = createClient();
 
-    // Sauvegarder la réponse
     if (partieId) {
-      await supabase.from("reponses").insert({
+      await supabase.from("zoo_reponses").insert({
         partie_id: partieId,
-        question_id: questions[currentIndex].id,
+        question_id: q.id,
         reponse_donnee: answer,
         est_correcte: isCorrect,
       });
     }
 
-    // Après 1.5 secondes, passer à la question suivante
     setTimeout(async () => {
       if (currentIndex + 1 >= questions.length) {
-        // Fin du quiz
         const eleveId = localStorage.getItem("zoo_eleve_id");
         if (eleveId && eleve) {
-          const newTotal = (eleve.total_carottes || 0) + newScore;
+          const oldTotal = eleve.total_carottes || 0;
+          const newTotal = oldTotal + newScore;
           const newNiveau = Math.floor(newTotal / 10);
           await supabase
-            .from("eleves")
-            .update({
-              total_carottes: newTotal,
-              niveau: newNiveau,
-            })
+            .from("zoo_eleves")
+            .update({ total_carottes: newTotal, niveau: newNiveau })
             .eq("id", eleveId);
 
           if (partieId) {
             await supabase
-              .from("parties")
+              .from("zoo_parties")
               .update({ score: newScore })
               .eq("id", partieId);
+          }
+
+          const earned = getNewlyEarnedBadge(oldTotal, newTotal);
+          if (earned) {
+            setNewBadge(earned);
+            setShowConfetti(true);
+          } else if (newScore >= 8) {
+            setShowConfetti(true);
           }
         }
         setGameOver(true);
@@ -204,45 +235,79 @@ function QuizPage() {
 
   if (gameOver && eleve) {
     const animalInfo = ANIMALS[eleve.animal_type as AnimalType];
+    const niveau = getLevel((eleve.total_carottes || 0) + score);
     return (
-      <div className="flex min-h-[80vh] items-center justify-center">
-        <div className="card animate-bounceIn w-full max-w-md text-center">
-          <h1 className="mb-4 text-3xl font-bold text-zoo-purple">
-            {score >= 8 ? "🎉 Bravo !" : score >= 5 ? "👍 Bien joué !" : "💪 Continue !"}
-          </h1>
+      <>
+        <Confetti active={showConfetti} />
+        <BadgePopup badge={newBadge} onClose={() => setNewBadge(null)} />
+        <div className="flex min-h-[80vh] items-center justify-center">
+          <div className="card animate-bounceIn w-full max-w-md text-center">
+            <h1 className="mb-4 text-3xl font-bold text-zoo-purple">
+              {score >= 8 ? "🎉 Bravo !" : score >= 5 ? "👍 Bien joué !" : "💪 Continue !"}
+            </h1>
 
-          <div className="mb-4">
-            <AnimalDisplay
-              type={eleve.animal_type as AnimalType}
-              color={eleve.animal_color as AnimalColor}
-              name={eleve.animal_name}
-              size="lg"
-            />
-          </div>
+            <div className="mb-4">
+              <AnimalDisplay
+                type={eleve.animal_type as AnimalType}
+                color={eleve.animal_color as AnimalColor}
+                name={eleve.animal_name}
+                size="lg"
+                niveau={niveau}
+              />
+            </div>
 
-          <div className="mb-6 rounded-[20px] bg-zoo-green/20 p-6">
-            <div className="text-5xl font-bold text-zoo-purple">{score}/10</div>
-            <div className="mt-2 text-xl">
-              {score} {animalInfo.foodEmoji} gagnée{score > 1 ? "s" : ""} !
+            <div className="mb-6 rounded-[20px] bg-zoo-green/20 p-6">
+              <div className="text-5xl font-bold text-zoo-purple">{score}/10</div>
+              <div className="mt-2 text-xl">
+                {score} {animalInfo.foodEmoji} gagnée{score > 1 ? "s" : ""} !
+              </div>
+            </div>
+
+            {/* Revoir les erreurs */}
+            {wrongAnswers.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setShowReview(!showReview)}
+                  className="rounded-[12px] bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition-all hover:bg-red-100"
+                >
+                  {showReview ? "Masquer" : `📖 Revoir mes ${wrongAnswers.length} erreur${wrongAnswers.length > 1 ? "s" : ""}`}
+                </button>
+
+                {showReview && (
+                  <div className="mt-3 space-y-3 text-left">
+                    {wrongAnswers.map((w, i) => (
+                      <div key={i} className="rounded-[12px] border-2 border-red-100 bg-red-50/50 p-3">
+                        <p className="text-sm font-semibold text-gray-800">{w.question}</p>
+                        <p className="mt-1 text-sm text-red-500">
+                          ❌ Ta réponse : <span className="font-medium">{w.givenText}</span>
+                        </p>
+                        <p className="text-sm text-green-600">
+                          ✅ Bonne réponse : <span className="font-medium">{w.correctText}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="btn-primary bg-gradient-to-r from-zoo-purple to-zoo-pink text-lg"
+              >
+                🏠 Retour au tableau de bord
+              </button>
+              <button
+                onClick={() => router.push("/scoreboard")}
+                className="btn-primary bg-gradient-to-r from-zoo-orange to-zoo-coral text-lg"
+              >
+                🏆 Voir le scoreboard
+              </button>
             </div>
           </div>
-
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="btn-primary bg-gradient-to-r from-zoo-purple to-zoo-pink text-lg"
-            >
-              🏠 Retour au tableau de bord
-            </button>
-            <button
-              onClick={() => router.push("/scoreboard")}
-              className="btn-primary bg-gradient-to-r from-zoo-orange to-zoo-coral text-lg"
-            >
-              🏆 Voir le scoreboard
-            </button>
-          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -276,11 +341,11 @@ function QuizPage() {
 
       {/* Question */}
       <div className="card animate-slideIn">
-        <h2 className="mb-6 text-center text-2xl font-bold text-gray-800">
+        <h2 className="mb-4 text-center text-lg font-bold text-gray-800 sm:mb-6 sm:text-2xl">
           {currentQuestion.question}
         </h2>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
           {options.map((option) => {
             const isCorrect = option.key === currentQuestion.bonne_reponse;
             const isSelected = selected === option.key;
@@ -301,7 +366,7 @@ function QuizPage() {
                 key={option.key}
                 onClick={() => handleAnswer(option.key)}
                 disabled={showResult}
-                className={`rounded-[15px] p-4 text-left text-lg font-medium transition-all ${bgClass} ${
+                className={`rounded-[12px] p-3 text-left text-base font-medium transition-all sm:rounded-[15px] sm:p-4 sm:text-lg ${bgClass} ${
                   !showResult ? "hover:scale-[1.02] active:scale-[0.98]" : ""
                 }`}
               >

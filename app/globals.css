@@ -37,7 +37,7 @@ body {
 }
 
 .card {
-  @apply rounded-[25px] bg-white p-6 shadow-[0_8px_25px_rgba(0,0,0,0.1)] transition-all;
+  @apply relative rounded-[20px] bg-white p-4 shadow-[0_8px_25px_rgba(0,0,0,0.1)] transition-all sm:rounded-[25px] sm:p-6;
 }
 
 .card-hover:hover {
@@ -45,5 +45,28 @@ body {
 }
 
 .btn-primary {
-  @apply rounded-[15px] px-6 py-3 font-semibold text-white transition-all hover:scale-105 active:scale-95;
+  @apply rounded-[12px] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:scale-105 active:scale-95 sm:rounded-[15px] sm:px-6 sm:py-3 sm:text-base;
+}
+
+@media (max-width: 640px) {
+  .card h1 { font-size: 1.5rem; }
+  .card h2 { font-size: 1.125rem; }
+}
+
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+.animate-confetti-fall {
+  animation: confetti-fall 2.5s ease-in forwards;
+}
+
+@keyframes streak-fire {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.animate-streak-fire {
+  animation: streak-fire 1s ease-in-out infinite;
 }
